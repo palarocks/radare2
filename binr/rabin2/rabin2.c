@@ -926,8 +926,9 @@ int main(int argc, char **argv) {
 				SdbListIter *iter;
 				SdbKv *kv;
 				printf ("fs format\n");
+				SdbList *list = sdb_foreach_list (db, true);
 				// iterate over all keys
-				ls_foreach (db->ht->list, iter, kv) {
+				ls_foreach (list, iter, kv) {
 					char *k = kv->key;
 					char *v = kv->value;
 					char *dup = strdup (k);
@@ -958,7 +959,7 @@ int main(int argc, char **argv) {
 					}
 					free (dup);
 				}
-
+				ls_free (list);
 			}
 			//sdb_query (bin->cur->sdb, "info/*");
 		} else {

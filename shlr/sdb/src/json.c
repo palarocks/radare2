@@ -61,19 +61,19 @@ static int findkey(Rangstr *rs) {
 	return -1;
 }
 
-static int isstring (const char *s) {
+static bool isstring (const char *s) {
 	if (!strcmp (s, "true")) {
-		return 0;
+		return false;
 	}
 	if (!strcmp (s, "false")) {
-		return 0;
+		return false;
 	}
 	for (; *s; s++) {
 		if (*s < '0' || *s > '9') {
-			return 1;
+			return true;
 		}
 	}
-	return 0;
+	return false;
 }
 
 // JSON only supports base16 numbers
@@ -87,17 +87,17 @@ SDB_API int sdb_json_unset (Sdb *s, const char *k, const char *p, ut32 cas) {
 	return sdb_json_set (s, k, p, NULL, cas);
 }
 
-SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, ut32 cas) {
-	const char *beg[3];
-	const char *end[3];
+SDB_API bool sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, ut32 cas) {
 	int l, idx, len[3], jslen = 0;
 	char *b, *str = NULL;
+	const char *beg[3];
+	const char *end[3];
 	const char *js;
 	Rangstr rs;
 	ut32 c;
 
 	if (!s || !k || !v) {
-		return 0;
+		return false;
 	}
 	js = sdb_const_get_len (s, k, &jslen, &c);
 	if (!js) {
@@ -115,12 +115,12 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 			sdb_set (s, k, b, cas);
 			free (b);
 #endif
-			return 1;
+			return true;
 		}
-		return 0;
+		return false;
 	}
 	if (cas && c != cas) {
-		return 0;
+		return false;
 	}
 	rs = json_get (js, p);
 	if (!rs.p) {
@@ -137,10 +137,10 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 			strcpy (b + curlen, js + 1);
 			// transfer ownership
 			sdb_set_owned (s, k, b, cas);
-			return 1;
+			return true;
 		}
 		// invalid json?
-		return 0;
+		return false;
 	} 
 #define WLEN(x) (int)(size_t)(end[x]-beg[x])
 
@@ -161,23 +161,23 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 	// TODO: accelerate with small buffer in stack for small jsons
 	if (*v) {
 		int is_str = isstring (v);
-		int msz = len[0]+len[1]+len[2]+strlen (v);
+		int msz = len[0] + len[1] + len[2] + strlen (v);
 		if (msz < 1) {
-			return 0;
+			return false;
 		}
 		str = malloc (msz);
 		if (!str) {
-			return 0;
+			return false;
 		}
 		idx = len[0];
 		memcpy (str, beg[0], idx);
 		if (is_str) {
-			if (beg[2][0]!='"') {
-				str[idx]='"';
+			if (beg[2][0] != '"') {
+				str[idx] = '"';
 				idx++;
 			}
 		} else {
-			if (beg[2][0]=='"') {
+			if (beg[2][0] == '"') {
 				idx--;
 			}
 		}
@@ -187,23 +187,23 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 		if (is_str) {
 			// TODO: add quotes
 			if (beg[2][0]!='"') {
-				str[idx]='"';
+				str[idx] = '"';
 				idx++;
 			}
 		} else {
-			if (beg[2][0]=='"') {
+			if (beg[2][0] == '"') {
 				beg[2]++;
 			}
 		}
 		l = len[2];
-		memcpy (str+idx, beg[2], l);
+		memcpy (str + idx, beg[2], l);
 		str[idx+l] = 0;
 	} else {
 		int kidx;
 		// DELETE KEY
 		rs.f -= 2;
 		kidx = findkey (&rs);
-		len[0] = R_MAX (1, kidx-1);
+		len[0] = R_MAX (1, kidx - 1);
 		if (kidx == 1){
 			if (beg[2][0] == '"') {
 				beg[2]++;
@@ -212,8 +212,9 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 			len[2]--;
 		}
 		str = malloc (len[0] + len[2]+1);
-		if (!str)
-			return 0;
+		if (!str) {
+			return false;
+		}
 		memcpy (str, beg[0], len[0]);
 		if (!*beg[2]) {
 			beg[2]--;
@@ -222,7 +223,7 @@ SDB_API int sdb_json_set (Sdb *s, const char *k, const char *p, const char *v, u
 		str[len[0] + len[2]] = 0;
 	}
 	sdb_set_owned (s, k, str, cas);
-	return 1;
+	return true;
 }
 
 SDB_API const char *sdb_json_format(SdbJsonString* s, const char *fmt, ...) {
@@ -241,15 +242,20 @@ SDB_API const char *sdb_json_format(SdbJsonString* s, const char *fmt, ...) {
 		}\
 		s->buf = x;\
 	}
-	if (!s) return NULL;
+	if (!s) {
+		return NULL;
+	}
 	if (!s->buf) {
 		s->blen = 1024;
 		s->buf = malloc (s->blen);
-		if (!s->buf)
+		if (!s->buf) {
 			return NULL;
+		}
 		*s->buf = 0;
 	}
-	if (!fmt || !*fmt) return s->buf;
+	if (!fmt || !*fmt) {
+		return s->buf;
+	}
 	va_start (ap, fmt);
 	for (; *fmt; fmt++) {
 		if (*fmt == '%') {

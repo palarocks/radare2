@@ -2,7 +2,13 @@
 #define R2_REG_H
 
 #include <r_types.h>
-#include <r_util.h>
+#include <r_list.h>
+#include <r_util/r_hex.h>
+#include <r_util/r_assert.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 R_LIB_VERSION_HEADER (r_reg);
 
@@ -40,8 +46,11 @@ typedef enum {
 	R_REG_NAME_A4,
 	R_REG_NAME_A5,
 	R_REG_NAME_A6,
+	R_REG_NAME_A7,
+	R_REG_NAME_A8,
+	R_REG_NAME_A9,
 	/* retval */
-	R_REG_NAME_R0, // arguments
+	R_REG_NAME_R0, // return registers
 	R_REG_NAME_R1,
 	R_REG_NAME_R2,
 	R_REG_NAME_R3,
@@ -79,12 +88,13 @@ typedef enum {
 typedef struct r_reg_item_t {
 	char *name;
 	int /*RRegisterType*/ type;
-	int size; /* 8,16,32,64 ... 128/256 ??? */
-	int offset; /* offset in data structure */
+	int size;	/* 8,16,32,64 ... 128/256 ??? */
+	int offset;      /* offset in data structure */
 	int packed_size; /* 0 means no packed register, 1byte pack, 2b pack... */
 	bool is_float;
 	char *flags;
 	int index;
+	int arena; /* in which arena is this reg living */
 } RRegItem;
 
 typedef struct r_reg_arena_t {
@@ -94,15 +104,17 @@ typedef struct r_reg_arena_t {
 
 typedef struct r_reg_set_t {
 	RRegArena *arena;
-	RList *pool; /* RRegArena */
-	RList *regs; /* RRegItem */
+	RList *pool;      /* RRegArena */
+	RList *regs;      /* RRegItem */
+	RListIter *cur;
+	int maskregstype; /* which type of regs have this reg set (logic mask with RRegisterType  R_REG_TYPE_XXX) */
 } RRegSet;
 
 typedef struct r_reg_t {
 	char *profile;
 	char *reg_profile_cmt;
 	char *reg_profile_str;
-	char *name[R_REG_NAME_LAST];
+	char *name[R_REG_NAME_LAST]; // aliases
 	RRegSet regset[R_REG_TYPE_LAST];
 	RList *allregs;
 	int iters;
@@ -129,11 +141,13 @@ R_API RReg *r_reg_new(void);
 R_API int r_reg_set_name(RReg *reg, int role, const char *name);
 R_API int r_reg_set_profile_string(RReg *reg, const char *profile);
 R_API int r_reg_set_profile(RReg *reg, const char *profile);
+R_API int r_reg_parse_gdb_profile(const char *profile);
 
 R_API RRegSet *r_reg_regset_get(RReg *r, int type);
 R_API ut64 r_reg_getv(RReg *reg, const char *name);
 R_API ut64 r_reg_setv(RReg *reg, const char *name, ut64 val);
-R_API const char *r_reg_32_to_64(RReg* reg, const char* rreg32);
+R_API const char *r_reg_32_to_64(RReg *reg, const char *rreg32);
+R_API const char *r_reg_64_to_32(RReg *reg, const char *rreg64);
 R_API const char *r_reg_get_type(int idx);
 R_API const char *r_reg_get_name(RReg *reg, int kind);
 R_API const char *r_reg_get_role(int role);
@@ -160,7 +174,10 @@ R_API int r_reg_cond(RReg *r, int type);
 
 /* integer value 8-64 bits */
 R_API ut64 r_reg_get_value(RReg *reg, RRegItem *item);
+R_API ut64 r_reg_get_value_big(RReg *reg, RRegItem *item, utX *val);
+R_API ut64 r_reg_get_value_by_role(RReg *reg, RRegisterId role);
 R_API bool r_reg_set_value(RReg *reg, RRegItem *item, ut64 value);
+R_API bool r_reg_set_value_by_role(RReg *reg, RRegisterId role, ut64 value);
 
 /* float */
 R_API float r_reg_get_float(RReg *reg, RRegItem *item);
@@ -186,7 +203,7 @@ R_API ut64 r_reg_get_pack(RReg *reg, RRegItem *item, int packidx, int packbits);
 R_API ut8 *r_reg_get_bytes(RReg *reg, int type, int *size);
 R_API bool r_reg_set_bytes(RReg *reg, int type, const ut8 *buf, const int len);
 R_API bool r_reg_read_regs(RReg *reg, ut8 *buf, const int len);
-R_API int r_reg_arena_set_bytes(RReg *reg, const char* str);
+R_API int r_reg_arena_set_bytes(RReg *reg, const char *str);
 R_API RRegArena *r_reg_arena_new(int size);
 R_API void r_reg_arena_free(RRegArena *ra);
 R_API int r_reg_fit_arena(RReg *reg);
@@ -200,6 +217,11 @@ R_API void r_reg_arena_poke(RReg *reg, const ut8 *buf);
 R_API ut8 *r_reg_arena_dup(RReg *reg, const ut8 *source);
 R_API const char *r_reg_cond_to_string(int n);
 R_API int r_reg_cond_from_string(const char *str);
+R_API void r_reg_arena_shrink(RReg *reg);
+
+#ifdef __cplusplus
+}
 #endif
 
+#endif
 #endif

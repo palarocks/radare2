@@ -1,3 +1,6 @@
+ISPPC=$(shell uname -m | grep Power)
+
+ifeq ($(ISPPC),)
 BIN=libr2
 ISLIB=1
 BINDEPS=r_core r_parse r_search r_cons r_config
@@ -11,12 +14,18 @@ ifeq ($(OSTYPE),android)
 LDFLAGS+=${DL_LIBS} -lm
 endif
 ifeq ($(OSTYPE),gnulinux)
-LDFLAGS+=-Wl,-soname,libr2.${EXT_SO}.${VERSION}
+LDFLAGS+=-Wl,-soname,libr2.${EXT_SO}.${LIBVERSION}
 endif
 include ../../libr/socket/deps.mk
 include ../../shlr/zip/deps.mk
 include ../../shlr/gdb/deps.mk
 include ../../shlr/bochs/deps.mk
+include ../../shlr/qnx/deps.mk
+include ../../shlr/ar/deps.mk
 
 clean::
 	rm -f $(BIN).$(EXT_SO) $(BIN).o
+else
+all:
+	@echo Cant build preloaded lib in old Macs
+endif

@@ -1,5 +1,6 @@
 #!/bin/sh
 
+STOW=0
 fromscratch=1
 onlymakedeb=0
 
@@ -12,7 +13,6 @@ if [ -z "${PACKAGE}" ]; then
 fi
 
 export BUILD=1
-PREFIX=/private/var/radare2
 
 if [ ! -d sys/ios-include/mach/vm_behavior.h  ]; then
 (
@@ -23,6 +23,11 @@ if [ ! -d sys/ios-include/mach/vm_behavior.h  ]; then
 fi
 
 . sys/ios-env.sh
+if [ "${STOW}" = 1 ]; then
+PREFIX=/private/var/radare2
+else
+PREFIX=/usr
+fi
 
 makeDeb() {
 	make -C binr ios-sdk-sign
@@ -35,6 +40,11 @@ makeDeb() {
 	sudo tar xpzvf /tmp/r2ios-${CPU}.tar.gz -C sys/cydia/radare2/root
 	rm -f sys/cydia/radare2/root/${PREFIX}/lib/*.dSYM
 	rm -f sys/cydia/radare2/root/${PREFIX}/lib/*.a
+        for a in sys/cydia/radare2/root/usr/bin/* sys/cydia/radare2/root/usr/lib/*.dylib ; do
+		echo "Signing $a"
+		ldid2 -Sbinr/radare2/radare2_ios.xml $a
+	done
+if [ "${STOW}" = 1 ]; then
 	(
 		cd sys/cydia/radare2/root/
 		mkdir -p usr/bin
@@ -50,6 +60,9 @@ makeDeb() {
 			fi
 		done
 	)
+else
+	echo "No need to stow anything"
+fi
 	( cd sys/cydia/radare2 ; sudo make clean ; sudo make PACKAGE=${PACKAGE} )
 }
 
@@ -62,18 +75,16 @@ if [ $onlymakedeb = 1 ]; then
 else
 	if [ $fromscratch = 1 ]; then
 		make clean
-		./configure --prefix="${PREFIX}" --with-ostype=darwin \
+		./configure --prefix="${PREFIX}" --with-ostype=darwin --without-libuv \
 			--with-compiler=ios-sdk --target=arm-unknown-darwin
 		RV=$?
 	else
 		RV=0
 	fi
 	if [ $RV = 0 ]; then
-		time make -j2
+		time make -j4
 		if [ $? = 0 ]; then
 			makeDeb
 		fi
 	fi
 fi
-
-

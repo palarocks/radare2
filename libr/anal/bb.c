@@ -1,8 +1,9 @@
-/* radare - LGPL - Copyright 2010-2016 - pancake, nibble */
+/* radare - LGPL - Copyright 2010-2018 - pancake, nibble */
 
 #include <r_anal.h>
 #include <r_util.h>
 #include <r_list.h>
+#include <limits.h>
 
 #define DFLT_NINSTR 3
 
@@ -22,7 +23,11 @@ R_API RAnalBlock *r_anal_bb_new() {
 	bb->label = NULL;
 	bb->op_pos = R_NEWS0 (ut16, DFLT_NINSTR);
 	bb->op_pos_size = DFLT_NINSTR;
-    bb->parent_reg_arena = NULL;
+	bb->parent_reg_arena = NULL;
+	bb->stackptr = 0;
+	bb->parent_stackptr = INT_MAX;
+	bb->cmpval = UT64_MAX;
+	bb->cmpreg = NULL;
 	return bb;
 }
 
@@ -42,24 +47,28 @@ R_API void r_anal_bb_free(RAnalBlock *bb) {
 	R_FREE (bb->label);
 	R_FREE (bb->op_pos);
 	R_FREE (bb->parent_reg_arena);
-    if (bb->prev) {
+	if (bb->prev) {
 		if (bb->prev->jumpbb == bb) {
 			bb->prev->jumpbb = NULL;
 		}
 		if (bb->prev->failbb == bb) {
 			bb->prev->failbb = NULL;
 		}
-    	bb->prev = NULL;
-    }
-    if (bb->jumpbb) {
+		bb->prev = NULL;
+	}
+	if (bb->jumpbb) {
 		bb->jumpbb->prev = NULL;
 		bb->jumpbb = NULL;
-    }
-    if (bb->failbb) {
+	}
+	if (bb->failbb) {
 		bb->failbb->prev = NULL;
 		bb->failbb = NULL;
-    }
-	R_FREE (bb);
+	}
+	if (bb->next) {
+		// avoid double free
+		bb->next->prev = NULL;
+	}
+	R_FREE (bb); // double free
 }
 
 R_API RList *r_anal_bb_list_new() {
@@ -84,11 +93,13 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 			eprintf ("Error: new (op)\n");
 			return R_ANAL_RET_ERROR;
 		}
-		if ((oplen = r_anal_op (anal, op, addr + idx, buf + idx, len - idx)) == 0) {
+		if ((oplen = r_anal_op (anal, op, addr + idx, buf + idx, len - idx, R_ANAL_OP_MASK_VAL)) == 0) {
 			r_anal_op_free (op);
 			op = NULL;
 			if (idx == 0) {
-				VERBOSE_ANAL eprintf ("Unknown opcode at 0x%08"PFMT64x"\n", addr+idx);
+				if (anal->verbose) {
+					eprintf ("Unknown opcode at 0x%08"PFMT64x"\n", addr+idx);
+				}
 				return R_ANAL_RET_END;
 			}
 			break;
@@ -111,7 +122,11 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 			if (bb->cond) {
 				// TODO: get values from anal backend
 				bb->cond->type = R_ANAL_COND_EQ;
-			} else VERBOSE_ANAL eprintf ("Unknown conditional for block 0x%"PFMT64x"\n", bb->addr);
+			} else {
+				if (anal->verbose) {
+					eprintf ("Unknown conditional for block 0x%"PFMT64x"\n", bb->addr);
+				}
+			}
 			bb->conditional = 1;
 			bb->fail = op->fail;
 			bb->jump = op->jump;
@@ -141,7 +156,7 @@ R_API int r_anal_bb(RAnal *anal, RAnalBlock *bb, ut64 addr, ut8 *buf, ut64 len, 
 					ut8 b[8];
 					ut64 ptr = idx+addr+src->delta;
 					anal->iob.read_at (anal->iob.io, ptr, b, memref);
-					r_anal_ref_add (anal, ptr, addr+idx-op->size, 'd');
+					r_anal_xrefs_set (anal, addr+idx-op->size, ptr, R_ANAL_REF_TYPE_DATA);
 				}
 			}
 		}
@@ -163,6 +178,21 @@ R_API RAnalBlock *r_anal_bb_from_offset(RAnal *anal, ut64 off) {
 	RListIter *iter, *iter2;
 	RAnalFunction *fcn;
 	RAnalBlock *bb;
+	const bool x86 = anal->cur->arch && !strcmp (anal->cur->arch, "x86");
+	if (anal->opt.jmpmid && x86) {
+		RAnalBlock *nearest_bb = NULL;
+		r_list_foreach (anal->fcns, iter, fcn) {
+			r_list_foreach (fcn->bbs, iter2, bb) {
+				if (r_anal_bb_op_starts_at (bb, off)) {
+					return bb;
+				} else if (r_anal_bb_is_in_offset (bb, off)
+				           && (!nearest_bb || nearest_bb->addr < bb->addr)) {
+					nearest_bb = bb;
+				}
+			}
+		}
+		return nearest_bb;
+	}
 	r_list_foreach (anal->fcns, iter, fcn) {
 		r_list_foreach (fcn->bbs, iter2, bb) {
 			if (r_anal_bb_is_in_offset (bb, off)) {
@@ -212,10 +242,23 @@ R_API RAnalBlock *r_anal_bb_get_failbb(RAnalFunction *fcn, RAnalBlock *bb) {
 }
 
 /* return the offset of the i-th instruction in the basicblock bb.
- * If the index of the instruction is not valid, it returns UT16_MAX  */
+ * If the index of the instruction is not valid, it returns UT16_MAX */
 R_API ut16 r_anal_bb_offset_inst(RAnalBlock *bb, int i) {
-	if (i < 0 || i >= bb->ninstr) return UT16_MAX;
-	return i > 0 ? bb->op_pos[i - 1] : 0;
+	if (i < 0 || i >= bb->ninstr) {
+		return UT16_MAX;
+	}
+	return (i > 0 && (i - 1) < bb->op_pos_size)? bb->op_pos[i - 1]: 0;
+}
+
+/* return the address of the i-th instruction in the basicblock bb.
+ * If the index of the instruction is not valid, it returns UT64_MAX */
+R_API ut64 r_anal_bb_opaddr_i(RAnalBlock *bb, int i) {
+	ut16 offset = r_anal_bb_offset_inst (bb, i);
+	if (offset == UT16_MAX) {
+		return UT64_MAX;
+	}
+
+	return bb->addr + offset;
 }
 
 /* set the offset of the i-th instruction in the basicblock bb */
@@ -255,5 +298,24 @@ R_API ut64 r_anal_bb_opaddr_at(RAnalBlock *bb, ut64 off) {
 		}
 		last_delta = delta;
 	}
-	return UT64_MAX;
+	return bb->addr + last_delta;
+}
+
+/* return true if an instruction starts at a given address of the given
+ * basic block. */
+R_API bool r_anal_bb_op_starts_at(RAnalBlock *bb, ut64 addr) {
+	ut16 off, inst_off;
+	int i;
+
+	if (!r_anal_bb_is_in_offset (bb, addr)) {
+		return false;
+	}
+	off = addr - bb->addr;
+	for (i = 0; i < bb->ninstr; i++) {
+		inst_off = r_anal_bb_offset_inst (bb, i);
+		if (off == inst_off) {
+			return true;
+		}
+	}
+	return false;
 }

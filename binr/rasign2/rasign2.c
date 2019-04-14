@@ -1,8 +1,8 @@
-/* radare - LGPL - Copyright 2009-2011 pancake<nopcode.org> */
+/* radare - LGPL - Copyright 2009-2019 - pancake */
 
 #include <stdio.h>
 #include <string.h>
-#include <getopt.h>
+#include <r_getopt.h>
 
 #include "r_userconf.h"
 #include "r_sign.h"
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 	int action = 0;
 	int rad = 0;
 	int json = 0;
-	RSign *sig = r_sign_new ();
+	//RSign *sig = r_sign_new ();
 
 	while ((c=getopt (argc, argv, "o:hrsj:iV")) !=-1) {
 		switch (c) {
@@ -41,8 +41,7 @@ int main(int argc, char **argv) {
 			json = 1;
 			break;
 		case 'V':
-			printf ("rasign2 v"R2_VERSION"\n");
-			return 0;
+			return blob_version ("rasign2");
 		default:
 			return rasign_show_help ();
 		}
@@ -51,7 +50,7 @@ int main(int argc, char **argv) {
 	if (argv[optind]==NULL)
 		return rasign_show_help ();
 
-	r_sign_list (sig, rad, json);
+	//r_sign_list (sig, rad, json);
 
 	switch (action) {
 	case 's':
@@ -64,7 +63,7 @@ int main(int argc, char **argv) {
 		break;
 	}
 
-	r_sign_free (sig);
+	//r_sign_free (sig);
 
 	return 0;
 }

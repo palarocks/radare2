@@ -6,7 +6,7 @@ INCDIR=${PREFIX}/include
 VAPIDIR=${DATADIR}/vala/vapi/
 MANDIR=${DATADIR}/man/man1
 
-SDBVER=0.10.4
+SDBVER=1.3.0
 
 BUILD_MEMCACHE=0
 
@@ -43,8 +43,8 @@ CFLAGS+=-Wall
 CFLAGS+=-Wsign-compare
 # some old gcc doesnt support this
 # CFLAGS+=-Wmissing-field-initializers
-CFLAGS+=-O3
-#CFLAGS+=-ggdb -g -Wall -O0
+#CFLAGS+=-O3
+CFLAGS+=-g -Wall -O0
 #CFLAGS+=-g
 #LDFLAGS+=-g -flto
 
@@ -52,7 +52,7 @@ HAVE_VALA=#$(shell valac --version 2> /dev/null)
 # This is hacky
 HOST_CC?=gcc
 RANLIB?=ranlib
-OS?=$(shell uname)
+OS=$(shell uname)
 OSTYPE?=$(shell uname -s)
 ARCH?=$(shell uname -m)
 
@@ -95,6 +95,7 @@ endif
 ifneq (,$(findstring MINGW,${OSTYPE})$(findstring MSYS,${OSTYPE})$(findstring CYGWIN,${OSTYPE}))
 EXT_SO=dll
 SOVER=${EXT_SO}
+CFLAGS+=-DUNICODE -D_UNICODE
 else
 EXT_SO=so
 SOVER=${EXT_SO}.${SDBVER}

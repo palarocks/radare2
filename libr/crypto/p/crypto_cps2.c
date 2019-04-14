@@ -12,8 +12,6 @@
 #include <r_lib.h>
 #include <r_crypto.h>
 
-static bool crypt_direction;
-
 // license:BSD-3-Clause
 // copyright-holders:Paul Leaman, Andreas Naive, Nicola Salmoria,Charles MacDonald
 /******************************************************************************
@@ -480,8 +478,9 @@ static void expand_1st_key(ut32 *dstkey, const ut32 *srckey) {
 	dstkey[2] = 0;
 	dstkey[3] = 0;
 
-	for (i = 0; i < 96; ++i)
-		dstkey[i / 24] |= BIT(srckey[bits[i] / 32], bits[i] % 32) << (i % 24);
+	for (i = 0; i < 96; ++i) {
+		dstkey[i / 24] |= BIT (srckey[bits[i] / 32], bits[i] % 32) << (i % 24);
+	}
 }
 
 // srckey is the 64-bit master key (2x32 bits) XORed with the subkey
@@ -602,7 +601,7 @@ static void optimise_sboxes(struct optimised_sbox* out, const struct sbox* in) {
 	}
 }
 
-static void cps2_crypt(const ut16 *rom, ut16 *dec, int length, const ut32 *master_key, ut32 upper_limit) {
+static void cps2_crypt(int dir, const ut16 *rom, ut16 *dec, int length, const ut32 *master_key, ut32 upper_limit) {
 	int i;
 	ut32 key1[4];
 	struct optimised_sbox sboxes1[4*4];
@@ -667,7 +666,7 @@ static void cps2_crypt(const ut16 *rom, ut16 *dec, int length, const ut32 *maste
 
 		// de/en-crypt the opcodes
 		for (a = i; a < length/2 && a < upper_limit/2; a += 0x10000) {
-			if (crypt_direction) {
+			if (dir) {
 				/* decrypt */
 				dec[a] = feistel (rom[a], fn2_groupA, fn2_groupB,
 					&sboxes2[0*4], &sboxes2[1*4], &sboxes2[2*4], &sboxes2[3*4],
@@ -708,7 +707,7 @@ main(cps_state,cps2crypt) {
 	upper = strtoll(supper.c_str(), nullptr, 16);
 
 	// we have a proper key so use it to decrypt
-	if (lower != 0xff0000) {// don't run the decrypt on 'dead key' games for now 
+	if (lower != 0xff0000) {// don't run the decrypt on 'dead key' games for now
 		cps2_decrypt( (ut16 *)memregion("maincpu")->base(), m_decrypted_opcodes, memregion("maincpu")->bytes(), key, lower,upper);
 	}
 }
@@ -716,8 +715,8 @@ main(cps_state,cps2crypt) {
 
 static ut32 cps2key[2] = {0};
 
-static int set_key(RCrypto *cry, const ut8 *key, int keylen, int mode, int direction) {
-	crypt_direction = (direction != 0);
+static bool set_key(RCrypto *cry, const ut8 *key, int keylen, int mode, int direction) {
+	cry->dir = direction;
 	if (keylen == 8) {
 		/* fix key endianness */
 		const ut32 *key32 = (const ut32*)key;
@@ -737,10 +736,10 @@ static bool cps2_use(const char *algo) {
 	return !strcmp (algo, "cps2");
 }
 
-static int update(RCrypto *cry, const ut8 *buf, int len) {
+static bool update(RCrypto *cry, const ut8 *buf, int len) {
 	ut8 *output = calloc (1, len);
 	/* TODO : control decryption errors */
-	cps2_crypt ((const ut16 *)buf, (ut16*)output, len, cps2key, UPPER_LIMIT);
+	cps2_crypt (cry->dir, (const ut16 *)buf, (ut16*)output, len, cps2key, UPPER_LIMIT);
 	r_crypto_append (cry, output, len);
 	free (output);
 	return true;
@@ -755,7 +754,7 @@ RCryptoPlugin r_crypto_plugin_cps2 = {
 };
 
 #ifndef CORELIB
-struct r_lib_struct_t radare_plugin = {
+R_API RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_CRYPTO,
 	.data = &r_crypto_plugin_rol,
 	.version = R2_VERSION

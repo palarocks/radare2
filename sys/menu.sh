@@ -5,7 +5,7 @@ if [ $? != 0 ]; then
 	if [ "`uname`" = Darwin ]; then
 		brew install dialog || exit 1
 	else
-		echo "Cannot find dialog in PATH" > /dev/stderr
+		echo "Cannot find dialog in PATH" >&2
 		exit 1
 	fi
 fi
@@ -210,14 +210,17 @@ BuildAndInstall() {
 		"Windows")
 			sys/mingw32.sh
 			;;
+		"Android ARM64")
+			sys/android-build.sh arm64
+			;;
 		"Android ARM")
-			sys/android-arm.sh
+			sys/android-build.sh arm
 			;;
 		"Android MIPS")
-			sys/android-mips.sh
+			sys/android-build.sh mips
 			;;
 		"Android X86")
-			sys/android-x86.sh
+			sys/android-build.sh x86
 			;;
 		esac
 	done

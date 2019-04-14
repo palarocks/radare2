@@ -1,29 +1,25 @@
 /* radare - LGPL - Copyright 2009-2015 - ret2libc, pancake */
 
-#include <stdio.h>
-#include <r_types.h>
-#include <r_util.h>
-#include <r_lib.h>
-#include <r_bin.h>
-
 #define R_BIN_CGC 1
-#include "bin_elf.c"
+#include "bin_elf.inc"
 
 extern struct r_bin_dbginfo_t r_bin_dbginfo_elf;
 extern struct r_bin_write_t r_bin_write_elf;
 
-static int check_bytes(const ut8 *buf, ut64 length) {
-	return buf && length > 4 && memcmp (buf, CGCMAG, SCGCMAG) == 0
-		&& buf[4] != 2;
+static bool check_buffer(RBuffer *buf) {
+	ut8 tmp[SCGCMAG + 1];
+	int r = r_buf_read_at (buf, 0, tmp, sizeof (tmp));
+	return r > SCGCMAG && !memcmp (tmp, CGCMAG, SCGCMAG) && tmp[4] != 2;
 }
 
-static int check(RBinFile *arch) {
-	const ut8 *bytes = arch ? r_buf_buffer (arch->buf) : NULL;
-	ut64 sz = arch ? r_buf_size (arch->buf): 0;
-	return check_bytes (bytes, sz);
+static bool check_bytes(const ut8 *b, ut64 length) {
+	RBuffer *buf = r_buf_new_with_bytes (b, length);
+	bool res = check_buffer (buf);
+	r_buf_free (buf);
+	return res;
 }
 
-static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data, int datalen) {
+static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data, int datalen, RBinArchOptions *opt) {
 	ut32 filesize, code_va, code_pa, phoff;
 	ut32 p_start, p_phoff, p_phdr;
 	ut32 p_ehdrsz, p_phdrsz;
@@ -32,12 +28,12 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 	ut32 baddr = 0x8048000;
 	RBuffer *buf = r_buf_new ();
 
-#define B(x,y) r_buf_append_bytes(buf,(const ut8*)x,y)
+#define B(x,y) r_buf_append_bytes(buf,(const ut8*)(x),y)
 #define D(x) r_buf_append_ut32(buf,x)
 #define H(x) r_buf_append_ut16(buf,x)
 #define Z(x) r_buf_append_nbytes(buf,x)
-#define W(x,y,z) r_buf_write_at(buf,x,(const ut8*)y,z)
-#define WZ(x,y) p_tmp=buf->length;Z(x);W(p_tmp,y,strlen(y))
+#define W(x,y,z) r_buf_write_at(buf,x,(const ut8*)(y),z)
+#define WZ(x,y) p_tmp=r_buf_size (buf);Z(x);W(p_tmp,y,strlen(y))
 
 	B ("\x7F" "CGC" "\x01\x01\x01\x43", 8);
 	Z (8);
@@ -45,38 +41,38 @@ static RBuffer* create(RBin* bin, const ut8 *code, int codelen, const ut8 *data,
 	H (3); // e_machne = EM_I386
 
 	D (1);
-	p_start = buf->length;
+	p_start = r_buf_size (buf);
 	D (-1); // _start
-	p_phoff = buf->length;
+	p_phoff = r_buf_size (buf);
 	D (-1); // phoff -- program headers offset
 	D (0);  // shoff -- section headers offset
 	D (0);  // flags
-	p_ehdrsz = buf->length;
+	p_ehdrsz = r_buf_size (buf);
 	H (-1); // ehdrsz
-	p_phdrsz = buf->length;
+	p_phdrsz = r_buf_size (buf);
 	H (-1); // phdrsz
 	H (1);
 	H (0);
 	H (0);
 	H (0);
 	// phdr:
-	p_phdr = buf->length;
+	p_phdr = r_buf_size (buf);
 	D (1);
 	D (0);
-	p_vaddr = buf->length;
+	p_vaddr = r_buf_size (buf);
 	D (-1); // vaddr = $$
-	p_paddr = buf->length;
+	p_paddr = r_buf_size (buf);
 	D (-1); // paddr = $$
-	p_fs = buf->length;
+	p_fs = r_buf_size (buf);
 	D (-1); // filesize
-	p_fs2 = buf->length;
+	p_fs2 = r_buf_size (buf);
 	D (-1); // filesize
 	D (5); // flags
 	D (0x1000); // align
 
 	ehdrsz = p_phdr;
-	phdrsz = buf->length - p_phdr;
-	code_pa = buf->length;
+	phdrsz = r_buf_size (buf) - p_phdr;
+	code_pa = r_buf_size (buf);
 	code_va = code_pa + baddr;
 	phoff = 0x34;//p_phdr ;
 	filesize = code_pa + codelen + datalen;
@@ -109,11 +105,10 @@ RBinPlugin r_bin_plugin_cgc = {
 	.desc = "CGC format r_bin plugin",
 	.license = "LGPL3",
 	.get_sdb = &get_sdb,
-	.load = &load,
-	.load_bytes = &load_bytes,
+	.load_buffer = load_buffer,
 	.destroy = &destroy,
-	.check = &check,
 	.check_bytes = &check_bytes,
+	.check_buffer = &check_buffer,
 	.baddr = &baddr,
 	.boffset = &boffset,
 	.binsym = &binsym,
@@ -131,4 +126,7 @@ RBinPlugin r_bin_plugin_cgc = {
 	.create = &create,
 	.patch_relocs = &patch_relocs,
 	.write = &r_bin_write_elf,
+	.file_type = get_file_type,
+	.regstate = regstate,
+	.maps = maps,
 };

@@ -12,17 +12,17 @@
 #define emit(frag) r_strbuf_appendf(&op->esil, frag)
 #define emitf(...) r_strbuf_appendf(&op->esil, __VA_ARGS__)
 //setting the appropriate flags, NOTE: semicolon included
-#define setZ r_strbuf_appendf(&op->esil, ",$z,Z,=") //zero flag
+#define setZ r_strbuf_appendf(&op->esil, ",$z,Z,:=") //zero flag
 #define setN r_strbuf_appendf(&op->esil, ",$s,N,=") //negative(sign) flag
 #define setV(val) r_strbuf_appendf(&op->esil, ",%s,V,=", val) //overflow flag
-#define setC_B r_strbuf_appendf(&op->esil, ",$c7,C,=") //carry flag for byte op
-#define setC_W r_strbuf_appendf(&op->esil, ",$c15,C,=") //carryflag for word op
-#define setCb_B r_strbuf_appendf(&op->esil, ",$b7,C,=") //borrow flag for byte
-#define setCb_W r_strbuf_appendf(&op->esil, ",$b15,C,=") //borrow flag for word
-#define setH_B r_strbuf_appendf(&op->esil, ",$c3,H,=") //half carry(byte)-bcd
-#define setH_W r_strbuf_appendf(&op->esil, ",$c11,H,=") //half carry(word)-bcd
-#define setHb_B r_strbuf_appendf(&op->esil, ",$b3,H,=") //half borrow(byte)-bcd
-#define setHb_W r_strbuf_appendf(&op->esil, ",$b11,H,=") //halfborrow(word)-bcd
+#define setC_B r_strbuf_appendf(&op->esil, ",7,$c,C,:=") //carry flag for byte op
+#define setC_W r_strbuf_appendf(&op->esil, ",15,$c,C,:=") //carryflag for word op
+#define setCb_B r_strbuf_appendf(&op->esil, ",7,$b,C,:=") //borrow flag for byte
+#define setCb_W r_strbuf_appendf(&op->esil, ",15,$b,C,:=") //borrow flag for word
+#define setH_B r_strbuf_appendf(&op->esil, ",3,$c,H,:=") //half carry(byte)-bcd
+#define setH_W r_strbuf_appendf(&op->esil, ",11,$c,H,:=") //half carry(word)-bcd
+#define setHb_B r_strbuf_appendf(&op->esil, ",3,$b,H,:=") //half borrow(byte)-bcd
+#define setHb_W r_strbuf_appendf(&op->esil, ",11,$b,H,:=") //halfborrow(word)-bcd
 
 //get reg. from opcodes
 #define rs() (buf[1]&0x70)>>4 //upper nibble used as source generally
@@ -86,8 +86,9 @@ static void h8300_anal_jsr(RAnalOp *op, ut64 addr, const ut8 *buf) {
 static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 	int ret = -1;
 	ut8 opcode = buf[0];
-	if (!op)
+	if (!op) {
 		return 2;
+	}
 	r_strbuf_init (&op->esil);
 	r_strbuf_set (&op->esil, "");
 	switch (opcode >> 4) {
@@ -219,7 +220,7 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 		return 0;
 	case H8300_ADDS:
 		r_strbuf_appendf (&op->esil, "%d,r%u,+=",
-			((buf[1] & 0xf0) == 0x08) ? 2 : 1, rd());
+			((buf[1] & 0xf0) == 0x80) ? 2 : 1, rd());
 		return 0;
 	case H8300_MOV_1:
 		/*TODO check if flags are set internally or not*/
@@ -305,23 +306,23 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 		r_strbuf_appendf(&op->esil, "r%u%c,r%u%c,-=", rsB(), rdB(1));
 		//setZ
 		setHb_B;
-		setV("%o") ;
-		setCb_B ;
+		setV("%o");
+		setCb_B;
 		setN;
 		maskB(1);
 		setZ;
 		return 0;
 	case H8300_SUBW:
-		r_strbuf_appendf(&op->esil, "r%u,r%u,-=", rs(), rd());
+		r_strbuf_appendf (&op->esil, "r%u,r%u,-=", rs(), rd());
 		setHb_W;
-		setV("%o") ;
-		setCb_W ;
+		setV ("%o");
+		setCb_W;
 		setN;
 		mask();
 		setZ;
 		return 0;
 	case H8300_DEC:
-		r_strbuf_appendf(&op->esil, "1,r%u%c,-=", rdB(1));
+		r_strbuf_appendf (&op->esil, "1,r%u%c,-=", rdB(1));
 		//setZ
 		setV("%o");
 		setN;
@@ -330,13 +331,13 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 		return 0;
 	case H8300_SUBS:
 		r_strbuf_appendf(&op->esil, "%d,r%u,-=",
-				( (buf[1] & 0xf0) == 0x08) ? 2 : 1, rd());
+			( (buf[1] & 0xf0) == 0x80) ? 2 : 1, rd());
 		return 0;
 	case H8300_CMP_1:
 		r_strbuf_appendf(&op->esil, "r%u%c,r%u%c,-", rsB(), rdB(1));
 		//setZ
 		setHb_B;
-		setV("%o") ;
+		setV("%o");
 		setCb_B;
 		setN;
 		maskB(1);
@@ -345,9 +346,9 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 	case H8300_CMP_2:
 		r_strbuf_appendf(&op->esil, "r%u,r%u,-", rs(), rd());
 		//setZ
-		setHb_W ;
+		setHb_W;
 		setV("%o");
-		setCb_W ;
+		setCb_W;
 		setN;
 		mask();
 		setZ;
@@ -355,11 +356,11 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 	case H8300_SUBX:
 		//Rd – (Rs) – C → Rd
 		r_strbuf_appendf(&op->esil, "r%u%c,r%u%c,-=,C,r%u%c,-=",
-				rsB(), rdB(1), rdB(1));
+			rsB(), rdB(1), rdB(1));
 		//setZ
-		setHb_B ;
-		setV("%o") ;
-		setCb_B ;
+		setHb_B;
+		setV("%o");
+		setCb_B;
 		setN;
 		maskB(1);
 		setZ;
@@ -443,17 +444,17 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 		//clear rs&0x7th bit of rd. expr.- rd&= !(1<<(rs&0x07))
 		r_strbuf_appendf(&op->esil, "0x7,r%u%c,&,1,<<,!,r%u%c,&=", rsB(), rdB(1));
 		return 0;
-		return 0;
 	case H8300_BTST_R2R8: /*TODO*/
 		//¬ (<Bit No.> of <EAd>) → Z, extract bit value and shift it back
 		r_strbuf_appendf(&op->esil, "0x7,r%u%c,&,0x7,r%u%c,&,1,<<,r%u%c,&,>>,!,Z,=",
 				rsB(), rsB(), rdB(1));
 		return 0;
 	case H8300_BST_BIST: /*TODO*/
-		if(! (buf[1] & 0x80) ) //BST
+		if (!(buf[1] & 0x80)) { //BST
 			r_strbuf_appendf(&op->esil,"%d,C,<<,r%u%c,|=",rs(),rdB(1));
-		else //BIST
-			r_strbuf_appendf(&op->esil,"%d,C,!,<<,r%u%c,|=",rs(),rdB(1));
+		} else { //BIST
+			r_strbuf_appendf (&op->esil, "%d,C,!,<<,r%u%c,|=", rs (), rdB (1));
+		}
 		return 0;
 	case H8300_MOV_R82IND16: /*TODO*/ return 0;
 	case H8300_MOV_IND162R16: /*TODO*/ return 0;
@@ -482,42 +483,46 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 				rs(), rs(), rdB(1));
 		return 0;
 	case H8300_BOR_BIOR: /*TODO*/
-		if(! (buf[1] & 0x80) ) //BOR
+		if (!(buf[1] & 0x80)) { //BOR
 			//C|=(rd&(1<<imm))>>imm
 			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,C,|=",
 					rs(), rs(), rdB(1));
-		else //BIOR
+		} else { //BIOR
 			//C|=!(rd&(1<<imm))>>imm
-			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,|=",
-					rs(), rs(), rdB(1));
+			r_strbuf_appendf (&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,|=",
+				rs (), rs (), rdB (1));
+		}
 		return 0;
 	case H8300_BXOR_BIXOR: /*TODO*/
-		if(! (buf[1] & 0x80) ) //BXOR
+		if (!(buf[1] & 0x80)) { //BXOR
 			//C^=(rd&(1<<imm))>>imm
 			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,C,^=",
 					rs(), rs(), rdB(1));
-		else //BIXOR
-			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,^=",
-					rs(), rs(), rdB(1));
+		} else { //BIXOR
+			r_strbuf_appendf (&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,^=",
+				rs (), rs (), rdB (1));
+		}
 		return 0;
 	case H8300_BAND_BIAND:
 		/*TODO check functionality*/
 		//C&=(rd&(1<<imm))>>imm
-		if(! (buf[1] & 0x80) ) //BAND
+		if (!(buf[1] & 0x80)) { //BAND
 			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,C,&=",
 					rs(), rs(), rdB(1));
-		else //BIAND
-			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,&=",
-					rs(), rs(), rdB(1));
+		} else { //BIAND
+			r_strbuf_appendf (&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,&=",
+				rs (), rs (), rdB (1));
+		}
 		return 0;
 	case H8300_BILD_IMM2R8:
 		/*TODO*/
-		if(! (buf[1] & 0x80) ) //BLD
+		if (!(buf[1] & 0x80)) { //BLD
 			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,C,=",
 					rs(), rs(), rdB(1));
-		else //BILD
-			r_strbuf_appendf(&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,=",
-					rs(), rs(), rdB(1));
+		} else { //BILD
+			r_strbuf_appendf (&op->esil, "%d,%d,1,<<,r%u%c,&,>>,!,C,=",
+				rs (), rs (), rdB (1));
+		}
 		return 0;
 	case H8300_MOV_IMM162R16: /*TODO*/ return 0;
 	case H8300_EEPMOV: /*TODO*/ return 0;
@@ -533,14 +538,15 @@ static int analop_esil(RAnal *a, RAnalOp *op, ut64 addr, const ut8 *buf) {
 }
 
 static int h8300_op(RAnal *anal, RAnalOp *op, ut64 addr,
-		const ut8 *buf, int len)
+		const ut8 *buf, int len, RAnalOpMask mask)
 {
 	int ret;
 	ut8 opcode = buf[0];
 	struct h8300_cmd cmd;
 
-	if (!op)
+	if (!op) {
 		return 2;
+	}
 
 	memset(op, 0, sizeof (RAnalOp));
 
@@ -549,8 +555,9 @@ static int h8300_op(RAnal *anal, RAnalOp *op, ut64 addr,
 	op->ptr = op->val = -1;
 	ret = op->size = h8300_decode_command(buf, &cmd);
 
-	if  (ret < 0)
+	if (ret < 0) {
 		return ret;
+	}
 	switch (opcode >> 4) {
 	case H8300_MOV_4BIT_2:
 	case H8300_MOV_4BIT_3:
@@ -671,7 +678,7 @@ static int h8300_op(RAnal *anal, RAnalOp *op, ut64 addr,
 		op->type = R_ANAL_OP_TYPE_UNK;
 		break;
 	};
-	if (anal->decode) {
+	if (mask & R_ANAL_OP_MASK_ESIL) {
 		analop_esil(anal, op, addr, buf);
 	}
 	return ret;
@@ -718,7 +725,7 @@ static int set_reg_profile(RAnal *anal) {
 	return r_reg_set_profile_string (anal->reg, p);
 }
 
-struct r_anal_plugin_t r_anal_plugin_h8300 = {
+RAnalPlugin r_anal_plugin_h8300 = {
 	.name = "h8300",
 	.desc = "H8300 code analysis plugin",
 	.license = "LGPL3",
@@ -730,7 +737,7 @@ struct r_anal_plugin_t r_anal_plugin_h8300 = {
 };
 
 #ifndef CORELIB
-struct r_lib_sturct_t radare_plugin = {
+struct r_lib_struct_t radare_plugin = {
 	.type = R_LIB_TYPE_ANAL,
 	.data = &r_anal_plugin_h8300,
 	.version = R2_VERSION

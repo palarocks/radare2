@@ -12,6 +12,8 @@ several data structures on top of an sdb or a memcache instance.
 
 [![Travis](https://api.travis-ci.org/radare/sdb.svg)](https://travis-ci.org/radare/sdb)
 
+[![Appveyor](https://ci.appveyor.com/api/projects/status/github/radare/sdb?branch=master&svg=true)](https://ci.appveyor.com/project/radare/sdb)
+
 [![Build Status](http://ci.rada.re/buildStatus/icon?job=sdb)](http://ci.rada.re/job/sdb/)
 
 [![Build Status](https://scan.coverity.com/projects/1651/badge.svg)](https://scan.coverity.com/projects/1651)
@@ -33,8 +35,15 @@ Contains
 Rips
 ----
 * disk storage based on cdb code
-* memory hashtable based on wayland code
 * linked lists from r2 api
+
+Compilation
+-----------
+For native builds just type `make`. Everything will be compiled twice to get the .dylib and .a and sdb in PIC and nonPIC modes.
+
+To compile with Emscripten for Javascript:
+
+	make CC=emcc EXT_EXE=.js
 
 Changes
 -------

@@ -1,4 +1,4 @@
-/* radare - LGPL - Copyright 2010-2016 - nibble, pancake */
+/* radare - LGPL - Copyright 2010-2017 - nibble, pancake */
 
 #include <r_anal.h>
 #include <r_util.h>
@@ -54,14 +54,14 @@ R_API int r_anal_diff_fingerprint_bb(RAnal *anal, RAnalBlock *bb) {
 	if (anal->cur && anal->cur->fingerprint_bb) {
 		return (anal->cur->fingerprint_bb (anal, bb));
 	}
-	if (!(bb->fingerprint = malloc (1+bb->size))) {
+	if (!(bb->fingerprint = malloc (1 + bb->size))) {
 		return false;
 	}
 	if (!(buf = malloc (bb->size + 1))) {
 		free (bb->fingerprint);
 		return false;
 	}
-	if (anal->iob.read_at (anal->iob.io, bb->addr, buf, bb->size) == bb->size) {
+	if (anal->iob.read_at (anal->iob.io, bb->addr, buf, bb->size)) {
 		memcpy (bb->fingerprint, buf, bb->size);
 		if (anal->diff_ops) { // diff using only the opcode
 			if (!(op = r_anal_op_new ())) {
@@ -70,7 +70,7 @@ R_API int r_anal_diff_fingerprint_bb(RAnal *anal, RAnalBlock *bb) {
 				return false;
 			}
 			while (idx < bb->size) {
-				if ((oplen = r_anal_op (anal, op, 0, buf+idx, bb->size-idx)) < 1) {
+				if ((oplen = r_anal_op (anal, op, 0, buf+idx, bb->size-idx, R_ANAL_OP_MASK_BASIC)) < 1) {
 					break;
 				}
 				if (op->nopcode != 0) {
@@ -98,8 +98,9 @@ R_API int r_anal_diff_fingerprint_fcn(RAnal *anal, RAnalFunction *fcn) {
 	r_list_foreach (fcn->bbs, iter, bb) {
 		len += bb->size;
 		fcn->fingerprint = realloc (fcn->fingerprint, len + 1);
-		if (!fcn->fingerprint)
+		if (!fcn->fingerprint) {
 			return 0;
+		}
 		memcpy (fcn->fingerprint+len-bb->size, bb->fingerprint, bb->size);
 	}
 	return len;
@@ -124,7 +125,7 @@ R_API bool r_anal_diff_bb(RAnal *anal, RAnalFunction *fcn, RAnalFunction *fcn2) 
 		ot = 0;
 		mbb = mbb2 = NULL;
 		r_list_foreach (fcn2->bbs, iter2, bb2) {
-			if (bb2->diff && bb2->diff->type == R_ANAL_DIFF_TYPE_NULL) {
+			if (!bb2->diff || bb2->diff->type == R_ANAL_DIFF_TYPE_NULL) {
 				r_diff_buffers_distance (NULL, bb->fingerprint, bb->size,
 						bb2->fingerprint, bb2->size, NULL, &t);
 				if (t > anal->diff_thbb && t > ot) {
@@ -239,10 +240,16 @@ R_API int r_anal_diff_fcn(RAnal *anal, RList *fcns, RList *fcns2) {
 				maxsize = fcn2_size;
 				minsize = fcn_size;
 			}
-			if ((fcn2->type != R_ANAL_FCN_TYPE_FCN
-				&& fcn2->type != R_ANAL_FCN_TYPE_SYM) ||
-				fcn2->diff->type != R_ANAL_DIFF_TYPE_NULL ||
-				(maxsize * anal->diff_thfcn > minsize)) {
+			if (maxsize * anal->diff_thfcn > minsize) {
+				eprintf ("Exceeded anal threshold while diffing %s and %s\n", fcn->name, fcn2->name);
+				continue;
+			}
+			if (fcn2->diff->type != R_ANAL_DIFF_TYPE_NULL) {
+				eprintf ("Function %s already diffed\n", fcn2->name);
+				continue;
+			}
+			if ((fcn2->type != R_ANAL_FCN_TYPE_FCN && fcn2->type != R_ANAL_FCN_TYPE_SYM)) {
+				eprintf ("Function %s type not supported\n", fcn2->name);
 				continue;
 			}
 			r_diff_buffers_distance (NULL, fcn->fingerprint, fcn_size, fcn2->fingerprint, fcn2_size, NULL, &t);

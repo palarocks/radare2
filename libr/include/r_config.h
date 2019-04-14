@@ -21,7 +21,6 @@ typedef int (*RConfigCallback)(void *user, void *data);
 
 typedef struct r_config_node_t {
 	char *name;
-	ut32 hash;
 	int flags;
 	char *value;
 	ut64 i_value;
@@ -31,6 +30,7 @@ typedef struct r_config_node_t {
 	RConfigCallback getter;
 	RConfigCallback setter;
 	char *desc;
+	RList *options;
 } RConfigNode;
 
 R_API const char *r_config_node_type(RConfigNode *node);
@@ -43,10 +43,34 @@ typedef struct r_config_t {
 	RNum *num;
 	PrintfCallback cb_printf;
 	RList *nodes;
-	RHashTable *ht;
+	HtPP *ht;
 } RConfig;
 
+typedef struct r_config_hold_num_t {
+	char *key;
+	ut64 value;
+} RConfigHoldNum;
+
+typedef struct r_config_hold_char_t {
+	char *key;
+	char *value;
+} RConfigHoldChar;
+
+typedef struct r_config_hold_t { 
+	RConfig *cfg;
+	RList *list_num; //list of RConfigHoldNum to hold numeric values 
+	RList *list_char; //list of RConfigHoldChar to hold char values
+} RConfigHold;
+
 #ifdef R_API
+R_API RConfigHold* r_config_hold_new(RConfig *cfg);
+R_API void r_config_hold_free(RConfigHold *h);
+
+R_API bool r_config_hold_i(RConfigHold *h, ...);
+R_API bool r_config_hold_s(RConfigHold *h, ...);
+
+R_API void r_config_hold_restore(RConfigHold *h);
+
 R_API RConfig *r_config_new(void *user);
 R_API RConfig *r_config_clone (RConfig *cfg);
 R_API int r_config_free(RConfig *cfg);
@@ -66,6 +90,7 @@ R_API void r_config_list(RConfig *cfg, const char *str, int rad);
 R_API RConfigNode *r_config_node_get(RConfig *cfg, const char *name);
 R_API RConfigNode *r_config_node_new(const char *name, const char *value);
 R_API void r_config_node_free(void *n);
+R_API void r_config_node_value_format_i(char *buf, size_t buf_size, const ut64 i, R_NULLABLE RConfigNode *node);
 R_API int r_config_toggle(RConfig *cfg, const char *name);
 R_API int r_config_readonly (RConfig *cfg, const char *key);
 

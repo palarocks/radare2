@@ -11,7 +11,7 @@
 // hack
 #include "../../asm/arch/i8080/i8080dis.c"
 
-static int i8080_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len) {
+static int i8080_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int len, RAnalOpMask mask) {
 	char out[32];
 	int ilen = i8080_disasm (data, out, len);
 	memset (op, '\0', sizeof (RAnalOp));
@@ -188,7 +188,7 @@ static int i8080_op(RAnal *anal, RAnalOp *op, ut64 addr, const ut8 *data, int le
 	return op->size = ilen;
 }
 
-struct r_anal_plugin_t r_anal_plugin_i8080 = {
+RAnalPlugin r_anal_plugin_i8080 = {
 	.name = "i8080",
 	.desc = "I8080 CPU code analysis plugin",
 	.license = "LGPL3",
@@ -198,7 +198,7 @@ struct r_anal_plugin_t r_anal_plugin_i8080 = {
 };
 
 #ifndef CORELIB
-struct r_lib_struct_t radare_plugin = {
+R_API RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_ANAL,
 	.data = &r_anal_plugin_i8080,
 	.version = R2_VERSION

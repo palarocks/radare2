@@ -1,5 +1,8 @@
 BIN=rasm2
-BINDEPS=r_asm r_parse r_syscall r_anal r_reg
-BINDEPS+=r_flag r_cons r_lang r_util
+BINDEPS=r_main
 
+include ../../libr/main/deps.mk
+include ../../shlr/zip/deps.mk
 include ../rules.mk
+
+LDFLAGS+=$(LINK)

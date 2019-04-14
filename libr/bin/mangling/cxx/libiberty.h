@@ -333,7 +333,17 @@ extern unsigned int xcrc32 (const unsigned char *, int, unsigned int);
    as new/delete and new[]/delete[].  */
 
 /* Scalar allocators.  */
+ #define XALLOCA(T)             ((T *) alloca (sizeof (T)))
+ #define XNEW(T)                        ((T *) xmalloc (sizeof (T)))
+ #define XCNEW(T)               ((T *) xcalloc (1, sizeof (T)))
 
+#ifdef _MSC_VER
+#include <stdlib.h>
+#define alloca(x) _alloca(x)
+#define xmalloc malloc
+#define xcalloc calloc
+#define xrealloc realloc
+#endif
 #define XALLOCA(T)		((T *) alloca (sizeof (T)))
 #define XNEW(T)			((T *) xmalloc (sizeof (T)))
 #define XCNEW(T)		((T *) xcalloc (1, sizeof (T)))
@@ -645,7 +655,9 @@ extern void setproctitle (const char *name, ...);
    USE_C_ALLOCA yourself.  The canonical autoconf macro C_ALLOCA is
    also set/unset as it is often used to indicate whether code needs
    to call alloca(0).  */
-extern void *C_alloca (size_t) ATTRIBUTE_MALLOC;
+#ifndef _MSC_VER
+extern void *_alloca (size_t) ATTRIBUTE_MALLOC;
+#endif
 #undef alloca
 #if GCC_VERSION >= 2000 && !defined USE_C_ALLOCA
 # define alloca(x) __builtin_alloca(x)
@@ -656,7 +668,7 @@ extern void *C_alloca (size_t) ATTRIBUTE_MALLOC;
    char *const libiberty_nptr = (char *const) alloca (libiberty_len); \
    (char *) memcpy (libiberty_nptr, libiberty_optr, libiberty_len); }))
 #else
-# define alloca(x) C_alloca(x)
+# define alloca(x) _alloca(x)
 # undef USE_C_ALLOCA
 # define USE_C_ALLOCA 1
 # undef C_ALLOCA

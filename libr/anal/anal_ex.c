@@ -5,7 +5,7 @@
 #include <r_util.h>
 #include <r_list.h>
 #include <r_io.h>
-#include "../config.h"
+#include <config.h>
 
 #ifdef IFDBG
 #undef IFDBG
@@ -35,19 +35,19 @@ ut64 extract_bin_op(ut64 ranal2_op_type);
 
 
 static void r_anal_ex_perform_pre_anal(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->pre_anal) {
+	if (anal && anal->cur && anal->cur->pre_anal) {
 		anal->cur->pre_anal (anal, state, addr);
 	}
 }
 
 static void r_anal_ex_perform_pre_anal_op_cb(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->pre_anal_op_cb) {
+	if (anal && anal->cur && anal->cur->pre_anal_op_cb) {
 		anal->cur->pre_anal_op_cb (anal, state, addr);
 	}
 }
 
 static void r_anal_ex_perform_pre_anal_bb_cb(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->pre_anal_bb_cb) {
+	if (anal && anal->cur && anal->cur->pre_anal_bb_cb) {
 		anal->cur->pre_anal_bb_cb (anal, state, addr);
 	}
 }
@@ -59,13 +59,13 @@ static void r_anal_ex_perform_pre_anal_bb_cb(RAnal *anal, RAnalState *state, ut6
 }*/
 
 static void r_anal_ex_perform_post_anal_op_cb(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->post_anal_op_cb) {
+	if (anal && anal->cur && anal->cur->post_anal_op_cb) {
 		anal->cur->post_anal_op_cb (anal, state, addr);
 	}
 }
 
 static void r_anal_ex_perform_post_anal_bb_cb(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->post_anal_bb_cb) {
+	if (anal && anal->cur && anal->cur->post_anal_bb_cb) {
 		anal->cur->post_anal_bb_cb (anal, state, addr);
 	}
 }
@@ -77,22 +77,24 @@ static void r_anal_ex_perform_post_anal_bb_cb(RAnal *anal, RAnalState *state, ut
 }*/
 
 static void r_anal_ex_perform_post_anal(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->post_anal) {
+	if (anal && anal->cur && anal->cur->post_anal) {
 		anal->cur->post_anal (anal, state, addr);
 	}
 }
 
 static void r_anal_ex_perform_revisit_bb_cb(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->revisit_bb_anal) {
+	if (anal && anal->cur && anal->cur->revisit_bb_anal) {
 		anal->cur->revisit_bb_anal (anal, state, addr);
 	}
 }
 
 R_API int r_anal_ex_bb_address_comparator(RAnalBlock *a, RAnalBlock *b){
-	if (a->addr == b->addr)
+	if (a->addr == b->addr) {
 		return 0;
-	else if (a->addr < b->addr)
+	}
+	if (a->addr < b->addr) {
 		return -1;
+	}
 	// a->addr > b->addr
 	return 1;
 }
@@ -100,7 +102,8 @@ R_API int r_anal_ex_bb_address_comparator(RAnalBlock *a, RAnalBlock *b){
 R_API int r_anal_ex_bb_head_comparator(RAnalBlock *a, RAnalBlock *b){
 	if (a->head == b->head) {
 		return 0;
-	} else if (a->head < b->head) {
+	}
+	if (a->head < b->head) {
 		return -1;
 	}
 	// a->head > b->head
@@ -111,28 +114,25 @@ R_API void r_anal_ex_clone_op_switch_to_bb (RAnalBlock *bb, RAnalOp *op) {
 	RListIter *iter;
 	RAnalCaseOp *caseop = NULL;
 
-	if (op->switch_op) {
-
+	if (bb && op && op->switch_op) {
 		bb->switch_op = r_anal_switch_op_new (op->switch_op->addr,
-											op->switch_op->min_val,
-											op->switch_op->max_val);
-		if (bb->switch_op){
-			r_list_foreach (op->switch_op->cases, iter, caseop) {
-				r_anal_switch_op_add_case (bb->switch_op, caseop->addr,
-													caseop->value, caseop->jump);
-			}
+				op->switch_op->min_val,
+				op->switch_op->max_val);
+		r_list_foreach (op->switch_op->cases, iter, caseop) {
+			r_anal_switch_op_add_case (bb->switch_op, caseop->addr,
+					caseop->value, caseop->jump);
 		}
 	}
 }
 
-R_API RAnalOp * r_anal_ex_get_op(RAnal *anal, RAnalState *state, ut64 addr) {
+R_API RAnalOp * r_anal_ex_get_op(RAnal *anal, RAnalState *state, ut64 addr, RAnalOpMask mask) {
 	RAnalOp *current_op = state->current_op;
 	const ut8 * data;
 	// current_op set in a prior stage
 	if (current_op) {
 		return current_op;
 	}
-	if (!anal->cur || (!anal->cur->op_from_buffer && !anal->cur->op)) {
+	if (!anal || !anal->cur || (!anal->cur->op_from_buffer && !anal->cur->op)) {
 		return NULL;
 	}
 	if (!r_anal_state_addr_is_valid(state, addr) ||
@@ -145,11 +145,10 @@ R_API RAnalOp * r_anal_ex_get_op(RAnal *anal, RAnalState *state, ut64 addr) {
 		current_op = anal->cur->op_from_buffer (anal, addr, data,  r_anal_state_get_len (state, addr));
 	} else {
 		current_op = r_anal_op_new();
-		anal->cur->op (anal, current_op, addr, data,  r_anal_state_get_len (state, addr));
+		anal->cur->op (anal, current_op, addr, data,  r_anal_state_get_len (state, addr), mask);
 	}
 	state->current_op = current_op;
 	return current_op;
-
 }
 
 R_API RAnalBlock * r_anal_ex_get_bb(RAnal *anal, RAnalState *state, ut64 addr) {
@@ -160,7 +159,7 @@ R_API RAnalBlock * r_anal_ex_get_bb(RAnal *anal, RAnalState *state, ut64 addr) {
 		return current_bb;
 	}
 	if (r_anal_state_addr_is_valid (state, addr) && !op) {
-		op = r_anal_ex_get_op (anal, state, addr);
+		op = r_anal_ex_get_op (anal, state, addr, R_ANAL_OP_MASK_ALL);
 	}
 	if (!op || !r_anal_state_addr_is_valid (state, addr)) {
 		return NULL;
@@ -178,12 +177,13 @@ R_API RAnalBlock * r_anal_ex_get_bb(RAnal *anal, RAnalState *state, ut64 addr) {
 		current_bb->op_bytes = malloc (current_bb->op_sz);
 		if (current_bb->op_bytes) {
 			int buf_len = r_anal_state_get_len (state, addr);
-			if (current_bb->op_sz < buf_len) {
-				eprintf ("Oops\n");
+			if (current_bb->op_sz > buf_len) {
 				r_anal_bb_free (current_bb);
 				return NULL;
 			}
-			memcpy (current_bb->op_bytes, r_anal_state_get_buf_by_addr(state, addr), current_bb->op_sz);
+			memcpy (current_bb->op_bytes,
+				r_anal_state_get_buf_by_addr (state, addr),
+				current_bb->op_sz);
 		}
 	}
 	state->current_bb = current_bb;
@@ -209,19 +209,18 @@ R_API void r_anal_ex_update_bb_cfg_head_tail( RAnalBlock *start, RAnalBlock * he
 			bb = bb->next;
 			bb->head = head;
 			bb->tail = tail;
-		}while (bb->next != NULL && !(bb->type & R_ANAL_BB_TYPE_TAIL));
+		} while (bb->next && !(bb->type & R_ANAL_BB_TYPE_TAIL));
 	}
 }
 
-R_API RList * r_anal_ex_perform_analysis(RAnal *anal, RAnalState *state, ut64 addr) {
-	if (anal->cur && anal->cur->analysis_algorithm) {
+R_API RList* r_anal_ex_perform_analysis(RAnal *anal, RAnalState *state, ut64 addr) {
+	if (anal && anal->cur && anal->cur->analysis_algorithm) {
 		return anal->cur->analysis_algorithm (anal, state, addr);
 	}
-
 	return r_anal_ex_analysis_driver (anal, state, addr);
 }
 
-R_API RList * r_anal_ex_analysis_driver(RAnal *anal, RAnalState *state, ut64 addr ) {
+R_API RList* r_anal_ex_analysis_driver(RAnal *anal, RAnalState *state, ut64 addr ) {
 	ut64 consumed_iter = 0;
 	ut64 bytes_consumed = 0, len = r_anal_state_get_len (state, addr);
 	RAnalBlock *pcurrent_bb   = state->current_bb,
@@ -256,7 +255,7 @@ R_API RList * r_anal_ex_analysis_driver(RAnal *anal, RAnalState *state, ut64 add
 		if (state->done) {
 			break;
 		}
-	   	r_anal_ex_get_op (anal, state, state->current_addr);
+	   	r_anal_ex_get_op (anal, state, state->current_addr, R_ANAL_OP_MASK_ALL);
 		r_anal_ex_perform_post_anal_op_cb (anal, state, state->current_addr);
 		if (state->done) {
 			break;
@@ -296,13 +295,11 @@ R_API RList * r_anal_ex_analysis_driver(RAnal *anal, RAnalState *state, ut64 add
 		state->current_op = NULL;
 		state->current_bb = NULL;
 		if (!consumed_iter) {
-			eprintf("No bytes consumed, bailing!\n");
+			eprintf ("No bytes consumed, bailing!\n");
 			break;
 		}
 		consumed_iter = 0;
 	}
-
-
 	r_anal_op_free (state->current_op);
 	r_anal_ex_perform_post_anal (anal, state, addr);
 	state->current_op = pcurrent_op;
@@ -334,19 +331,25 @@ R_API ut64 r_anal_ex_map_anal_ex_to_anal_bb_type (ut64 ranal2_op_type) {
 		R_ANAL_OP_TYPE_COND : 0;
 	ut64 code_op_val = ranal2_op_type & (R_ANAL_EX_CODE_OP | 0x1FF);
 
-	if (conditional)
+	if (conditional) {
 		bb_type |= R_ANAL_BB_TYPE_COND;
-	if (ranal2_op_type & R_ANAL_EX_LOAD_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_LOAD_OP) {
 		bb_type |= R_ANAL_BB_TYPE_LD;
-	if (ranal2_op_type & R_ANAL_EX_BIN_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_BIN_OP) {
 		bb_type |= R_ANAL_BB_TYPE_BINOP;
-	if (ranal2_op_type & R_ANAL_EX_LOAD_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_LOAD_OP) {
 		bb_type |= R_ANAL_BB_TYPE_LD;
-	if (ranal2_op_type & R_ANAL_EX_STORE_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_STORE_OP) {
 		bb_type |= R_ANAL_BB_TYPE_ST;
+	}
 	/* mark bb with a comparison */
-	if (ranal2_op_type & R_ANAL_EX_BINOP_CMP)
+	if (ranal2_op_type & R_ANAL_EX_BINOP_CMP) {
 		bb_type |= R_ANAL_BB_TYPE_CMP;
+	}
 
 	/* change in control flow here */
 	if (code_op_val & R_ANAL_EX_CODEOP_JMP) {
@@ -365,11 +368,13 @@ R_API ut64 r_anal_ex_map_anal_ex_to_anal_bb_type (ut64 ranal2_op_type) {
 		bb_type |= R_ANAL_BB_TYPE_TAIL;
 	}
 
-	if ( ranal2_op_type  & R_ANAL_EX_UNK_OP && code_op_val & R_ANAL_EX_CODEOP_JMP)
+	if (ranal2_op_type & R_ANAL_EX_UNK_OP && code_op_val & R_ANAL_EX_CODEOP_JMP) {
 		bb_type |= R_ANAL_BB_TYPE_FOOT;
+	}
 
-	if ( conditional && code_op_val & R_ANAL_EX_CODEOP_JMP)
+	if (conditional && code_op_val & R_ANAL_EX_CODEOP_JMP) {
 		bb_type |= R_ANAL_BB_TYPE_BODY;
+	}
 
 	return bb_type;
 }
@@ -400,23 +405,32 @@ ut64 extract_code_op(ut64 ranal2_op_type) {
 
 
 ut64 extract_load_store_op(ut64 ranal2_op_type) {
-	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_PUSH) == R_ANAL_EX_LDST_OP_PUSH)
+	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_PUSH) == R_ANAL_EX_LDST_OP_PUSH) {
 		return R_ANAL_OP_TYPE_PUSH;
-	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_POP) == R_ANAL_EX_LDST_OP_POP )
+	}
+	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_POP) == R_ANAL_EX_LDST_OP_POP) {
 		return R_ANAL_OP_TYPE_POP;
-	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_MOV) == R_ANAL_EX_LDST_OP_MOV)
+	}
+	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_MOV) == R_ANAL_EX_LDST_OP_MOV) {
 		return R_ANAL_OP_TYPE_MOV;
-	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_EFF_ADDR) == R_ANAL_EX_LDST_OP_EFF_ADDR)
+	}
+	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_EFF_ADDR) == R_ANAL_EX_LDST_OP_EFF_ADDR) {
 		return R_ANAL_OP_TYPE_LEA;
+	}
 	return R_ANAL_OP_TYPE_UNK;
 }
 
 
 ut64 extract_unknown_op(ut64 ranal2_op_type) {
-
-	if ( (ranal2_op_type & R_ANAL_EX_CODEOP_JMP) == R_ANAL_EX_CODEOP_JMP )  return R_ANAL_OP_TYPE_UJMP;
-	if ( (ranal2_op_type & R_ANAL_EX_CODEOP_CALL) == R_ANAL_EX_CODEOP_CALL) return R_ANAL_OP_TYPE_UCALL;
-	if ( (ranal2_op_type & R_ANAL_EX_LDST_OP_PUSH) == R_ANAL_EX_LDST_OP_PUSH) return R_ANAL_OP_TYPE_UPUSH;
+	if ((ranal2_op_type & R_ANAL_EX_CODEOP_JMP) == R_ANAL_EX_CODEOP_JMP) {
+		return R_ANAL_OP_TYPE_UJMP;
+	}
+	if ((ranal2_op_type & R_ANAL_EX_CODEOP_CALL) == R_ANAL_EX_CODEOP_CALL) {
+		return R_ANAL_OP_TYPE_UCALL;
+	}
+	if ((ranal2_op_type & R_ANAL_EX_LDST_OP_PUSH) == R_ANAL_EX_LDST_OP_PUSH) {
+		return R_ANAL_OP_TYPE_UPUSH;
+	}
 	return R_ANAL_OP_TYPE_UNK;
 }
 
@@ -448,28 +462,27 @@ ut64 extract_bin_op(ut64 ranal2_op_type) {
 
 
 R_API ut64 r_anal_ex_map_anal_ex_to_anal_op_type (ut64 ranal2_op_type) {
-
 	switch (ranal2_op_type) {
-		case R_ANAL_EX_NULL_OP: return R_ANAL_OP_TYPE_NULL;
-		case R_ANAL_EX_NOP: return R_ANAL_OP_TYPE_NOP;
-		case R_ANAL_EX_ILL_OP: return R_ANAL_OP_TYPE_ILL;
-		default: break;
+	case R_ANAL_EX_NULL_OP: return R_ANAL_OP_TYPE_NULL;
+	case R_ANAL_EX_NOP: return R_ANAL_OP_TYPE_NOP;
+	case R_ANAL_EX_ILL_OP: return R_ANAL_OP_TYPE_ILL;
+	default: break;
 	}
-
-	if ( ranal2_op_type & R_ANAL_EX_UNK_OP)
+	if (ranal2_op_type & R_ANAL_EX_UNK_OP) {
 		return extract_unknown_op(ranal2_op_type);
-
-	if ( ranal2_op_type & R_ANAL_EX_CODE_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_CODE_OP) {
 		return extract_code_op(ranal2_op_type);
-
-	if ( ranal2_op_type & R_ANAL_EX_REP_OP)
-		return R_ANAL_OP_TYPE_REP | r_anal_ex_map_anal_ex_to_anal_op_type ( ranal2_op_type & ~R_ANAL_EX_REP_OP );
-
-	if ( ranal2_op_type & (R_ANAL_EX_LOAD_OP | R_ANAL_EX_STORE_OP ))
+	}
+	if (ranal2_op_type & R_ANAL_EX_REP_OP) {
+		ut64 ret = r_anal_ex_map_anal_ex_to_anal_op_type (ranal2_op_type & ~R_ANAL_EX_REP_OP);
+		return R_ANAL_OP_TYPE_REP | ret;
+	}
+	if (ranal2_op_type & (R_ANAL_EX_LOAD_OP | R_ANAL_EX_STORE_OP)) {
 		return extract_load_store_op(ranal2_op_type);
-
-	if ( ranal2_op_type & R_ANAL_EX_BIN_OP)
+	}
+	if (ranal2_op_type & R_ANAL_EX_BIN_OP) {
 		return extract_bin_op(ranal2_op_type);
-
+	}
 	return R_ANAL_OP_TYPE_UNK;
 }

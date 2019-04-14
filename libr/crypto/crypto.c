@@ -1,12 +1,14 @@
-/* radare - LGPL - Copyright 2009-2016 - pancake */
+/* radare - LGPL - Copyright 2009-2017 - pancake */
 
 #include "r_crypto.h"
-#include "../config.h"
+#include "config.h"
 
 R_LIB_VERSION (r_crypto);
 
-struct { const char *name; ut64 bit; }
-static const crypto_name_bytes[] = {
+static const struct {
+	const char *name;
+	ut64 bit;
+} crypto_name_bytes[] = {
 	{"all", UT64_MAX},
 	{"rc2", R_CRYPTO_RC2},
 	{"rc4", R_CRYPTO_RC4},
@@ -18,14 +20,19 @@ static const crypto_name_bytes[] = {
 	{"rot", R_CRYPTO_ROT},
 	{"blowfish", R_CRYPTO_BLOWFISH},
 	{"cps2", R_CRYPTO_CPS2},
+	{"des-ecb", R_CRYPTO_DES_ECB},
+	{"xor", R_CRYPTO_XOR},
+	{"serpent-ecb", R_CRYPTO_SERPENT},
 	{NULL, 0}
 };
 
 R_API const char *r_crypto_name(ut64 bit) {
 	int i;
-	for (i=1; crypto_name_bytes[i].bit; i++)
-		if (bit & crypto_name_bytes[i].bit)
+	for (i = 1; crypto_name_bytes[i].bit; i++) {
+		if (bit & crypto_name_bytes[i].bit) {
 			return crypto_name_bytes[i].name;
+		}
+	}
 	return "";
 }
 
@@ -34,7 +41,6 @@ static RCryptoPlugin *crypto_static_plugins[] = {
 };
 
 R_API RCrypto *r_crypto_init(RCrypto *cry, int hard) {
-	RCryptoPlugin *p;
 	int i;
 	if (cry) {
 		cry->iv = NULL;
@@ -46,7 +52,11 @@ R_API RCrypto *r_crypto_init(RCrypto *cry, int hard) {
 			r_crypto_get_output (cry, NULL);
 			cry->plugins = r_list_newf (NULL);
 			for (i=0; crypto_static_plugins[i]; i++) {
-				p = R_NEW0 (RCryptoPlugin);
+				RCryptoPlugin *p = R_NEW0 (RCryptoPlugin);
+				if (!p) {
+					free (cry);
+					return NULL;
+				}
 				memcpy (p, crypto_static_plugins[i], sizeof (RCryptoPlugin));
 				r_crypto_add (cry, p);
 			}
@@ -104,11 +114,14 @@ R_API bool r_crypto_use(RCrypto *cry, const char *algo) {
 	return false;
 }
 
-R_API int r_crypto_set_key(RCrypto *cry, const ut8* key, int keylen, int mode, int direction) {
-	if (keylen < 0)
+R_API bool r_crypto_set_key(RCrypto *cry, const ut8* key, int keylen, int mode, int direction) {
+	if (keylen < 0) {
 		keylen = strlen ((const char *)key);
-	return (cry && cry->h && cry->h->set_key)?
-		cry->h->set_key (cry, key, keylen, mode, direction): false;
+	}
+	if (!cry || !cry->h || !cry->h->set_key) {
+		return false;
+	}
+	return cry->h->set_key (cry, key, keylen, mode, direction);
 }
 
 R_API int r_crypto_get_key_size(RCrypto *cry) {
@@ -116,7 +129,7 @@ R_API int r_crypto_get_key_size(RCrypto *cry) {
 		cry->h->get_key_size (cry): 0;
 }
 
-R_API int r_crypto_set_iv(RCrypto *cry, const ut8 *iv, int ivlen) {
+R_API bool r_crypto_set_iv(RCrypto *cry, const ut8 *iv, int ivlen) {
 	return (cry && cry->h && cry->h->set_iv)?
 		cry->h->set_iv(cry, iv, ivlen): 0;
 }

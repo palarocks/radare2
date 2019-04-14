@@ -7,11 +7,11 @@ static int parse_fpo_data(char *data, int data_size, int *read_bytes, SFPO_DATA 
 {
 	int curr_read_bytes = *read_bytes;
 
-	READ(*read_bytes, 4, data_size, fpo_data->ul_off_start, data, unsigned int);
-	READ(*read_bytes, 4, data_size, fpo_data->cb_proc_size, data, unsigned int);
-	READ(*read_bytes, 4, data_size, fpo_data->cdw_locals, data, unsigned int);
-	READ(*read_bytes, 2, data_size, fpo_data->cdw_params, data, unsigned short);
-	READ(*read_bytes, 2, data_size, fpo_data->bit_values.bit_values, data, unsigned short);
+	READ4(*read_bytes, data_size, fpo_data->ul_off_start, data, ut32);
+	READ4(*read_bytes, data_size, fpo_data->cb_proc_size, data, ut32);
+	READ4(*read_bytes, data_size, fpo_data->cdw_locals, data, ut32);
+	READ2(*read_bytes, data_size, fpo_data->cdw_params, data, ut16);
+	READ2(*read_bytes, data_size, fpo_data->bit_values.bit_values, data, ut16);
 
 	fpo_data->bit_values.bit_values = SWAP_UINT16(fpo_data->bit_values.bit_values);
 
@@ -44,7 +44,6 @@ void parse_fpo_stream(void *stream, R_STREAM_FILE *stream_file)
 
 	fpo_stream = (SFPOStream *) stream;
 	fpo_stream->fpo_data_list = r_list_new();
-	curr_read_bytes = 0;
 	ptmp = data;
 	while (read_bytes < data_size) {
 		fpo_data = (SFPO_DATA *) malloc(sizeof(SFPO_DATA));
@@ -56,7 +55,7 @@ void parse_fpo_stream(void *stream, R_STREAM_FILE *stream_file)
 			break;
 		}
 
-		r_list_append(fpo_stream->fpo_data_list, fpo_data);
+		r_list_append (fpo_stream->fpo_data_list, fpo_data);
 	}
 
 	free(data);
@@ -103,12 +102,13 @@ void parse_fpo_new_stream(void *stream, R_STREAM_FILE *stream_file)
 
 	stream_file_get_size (stream_file, &data_size);
 	data = (char *) malloc (data_size);
-	if (!data) return;
+	if (!data) {
+		return;
+	}
 	stream_file_get_data (stream_file, data);
 
 	fpo_stream = (SFPONewStream *) stream;
 	fpo_stream->fpo_data_list = r_list_new ();
-	curr_read_bytes = 0;
 	ptmp = data;
 	while (read_bytes < data_size) {
 		fpo_data = (SFPO_DATA_V2 *) malloc (sizeof(SFPO_DATA_V2));

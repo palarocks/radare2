@@ -410,6 +410,9 @@ grub_disk_read (grub_disk_t disk, grub_disk_addr_t sector,
 {
   char *tmp_buf;
   unsigned real_offset;
+  if ((int)size < 1) {
+    return grub_errno;
+  }
 
   /* First of all, check if the region is within the disk.  */
   if (grub_disk_adjust_range (disk, &sector, &offset, size) != GRUB_ERR_NONE)
@@ -425,8 +428,9 @@ grub_disk_read (grub_disk_t disk, grub_disk_addr_t sector,
 
   /* Allocate a temporary buffer.  */
   tmp_buf = grub_malloc (GRUB_DISK_SECTOR_SIZE << GRUB_DISK_CACHE_BITS);
-  if (! tmp_buf)
+  if (! tmp_buf) {
     return grub_errno;
+  }
 
   /* Until SIZE is zero...  */
   while (size)
@@ -449,8 +453,14 @@ grub_disk_read (grub_disk_t disk, grub_disk_addr_t sector,
       if (data)
 	{
 	  /* Just copy it!  */
-	  if (buf)
+	  if (buf) {
+	    if (pos + real_offset + len >= size) {
+              // prevent read overflow
+              grub_errno = GRUB_ERR_BAD_FS;
+              goto finish;
+	    }
 	    grub_memcpy (buf, data + pos + real_offset, len);
+          }
 	  grub_disk_cache_unlock (disk->dev->id, disk->id, start_sector);
 	}
       else

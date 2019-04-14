@@ -47,7 +47,7 @@
 
 #define XSTATE_SSE_MASK         (X87_BIT|SSE_BIT)
 #define XSTATE_AVX_MASK         (XSTATE_SSE_MASK|AVX_BIT)
-#define XSTATE_MPX_MASK         MPX_BIT
+#define XSTATE_MPX_MASK         (MPX_BIT|XSTATE_AVX_MASK|XSTATE_SSE_MASK)
 #define XSTATE_AVX512_MASK      (XSTATE_AVX_MASK|AVX512_FULL_BIT)
 /*********************************/
 #endif
@@ -133,6 +133,7 @@ typedef struct linux_map_entry {
 	bool dumpeable;
 	bool kernel_mapping;
 	bool file_backed;
+	bool shared;
 	char *name;
 	struct linux_map_entry *n;
 } linux_map_entry_t;

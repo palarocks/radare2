@@ -1,10 +1,30 @@
-/* radare - LGPL - Copyright 2012-2016 - pancake */
+/* radare - LGPL - Copyright 2012-2017 - pancake */
 
 #include <r_util.h>
 #include <signal.h>
+#if _MSC_VER
+#include <process.h> // to compile execl under msvc windows
+#include <direct.h>  // to compile chdir under msvc windows
+#endif
+
+#if HAVE_CAPSICUM
+#include <sys/capsicum.h>
+#endif
 
 static bool enabled = false;
 static bool disabled = false;
+
+static bool inHomeWww(const char *path) {
+	bool ret = false;
+	char *homeWww = r_str_home (R2_HOME_WWWROOT R_SYS_DIR);
+	if (homeWww) {
+		if (!strncmp (path, homeWww, strlen (homeWww))) {
+			ret = true;
+		}
+		free (homeWww);
+	}
+	return ret;
+}
 
 /**
  * This function verifies that the given path is allowed. Paths are allowed only if they don't
@@ -12,41 +32,59 @@ static bool disabled = false;
  * Paths pointing into the webroot are an exception: For reaching the webroot, .. and absolute
  * path are ok.
  */
-R_API int r_sandbox_check_path (const char *path) {
+R_API bool r_sandbox_check_path (const char *path) {
 	size_t root_len;
-	char ch;
 	char *p;
 	/* XXX: the sandbox can be bypassed if a directory is symlink */
 
-	if (!path) return 0;
-
+	if (!path) {
+		return false;
+	}
 	root_len = strlen (R2_LIBDIR"/radare2");
-	if (!strncmp (path, R2_LIBDIR"/radare2", root_len))
-		return 1;
+	if (!strncmp (path, R2_LIBDIR"/radare2", root_len)) {
+		return true;
+	}
 	root_len = strlen (R2_DATDIR"/radare2");
-	if (!strncmp (path, R2_DATDIR"/radare2", root_len))
-		return 1;
+	if (!strncmp (path, R2_DATDIR"/radare2", root_len)) {
+		return true;
+	}
+	if (inHomeWww (path)) {
+		return true;
+	}
 	// Accessing stuff inside the webroot is ok even if we need .. or leading / for that
 	root_len = strlen (R2_WWWROOT);
 	if (R2_WWWROOT[0] && !strncmp (path, R2_WWWROOT, root_len) && (
 			R2_WWWROOT[root_len-1] == '/' || path[root_len] == '/' || path[root_len] == '\0')) {
 		path += strlen (R2_WWWROOT);
-		while (*path == '/') path++;
+		while (*path == '/') {
+			path++;
+		}
 	}
 
 	// ./ path is not allowed
-        if (path[0]=='.' && path[1]=='/') return 0;
+        if (path[0]=='.' && path[1]=='/') {
+		return false;
+	}
 	// Properly check for directrory traversal using "..". First, does it start with a .. part?
-        if (path[0]=='.' && path[1]=='.' && (path[2]=='\0' || path[2]=='/')) return 0;
+	if (path[0] == '.' && path[1] == '.' && (path[2] == '\0' || path[2] == '/')) {
+		return 0;
+	}
 
 	// Or does it have .. in some other position?
-	for (p = strstr (path, "/.."); p; p = strstr(p, "/.."))
-		if (p[3] == '\0' || p[3] == '/') return 0;
-
+	for (p = strstr (path, "/.."); p; p = strstr(p, "/..")) {
+		if (p[3] == '\0' || p[3] == '/') {
+			return false;
+		}
+	}
 	// Absolute paths are forbidden.
-	if (*path == '/') return 0;
+	if (*path == '/') {
+		return false;
+	}
 #if __UNIX__
-	if (readlink (path, &ch, 1) != -1) return 0;
+	char ch;
+	if (readlink (path, &ch, 1) != -1) {
+		return false;
+	}
 #endif
 	return true;
 }
@@ -59,8 +97,14 @@ R_API bool r_sandbox_disable (bool e) {
 			return enabled;
 		}
 #endif
+#if HAVE_CAPSICUM
+		if (enabled) {
+			eprintf ("sandbox mode couldn't be disabled in capability mode\n");
+			return enabled;
+		}
+#endif
 		disabled = enabled;
-		enabled = 0;
+		enabled = false;
 	} else {
 		enabled = disabled;
 	}
@@ -69,13 +113,22 @@ R_API bool r_sandbox_disable (bool e) {
 
 R_API bool r_sandbox_enable (bool e) {
 	if (enabled) {
+		if (!e) {
+			// eprintf ("Cant disable sandbox\n");
+		}
 		return true;
 	}
-	enabled = !!e;
+	enabled = e;
 #if LIBC_HAVE_PLEDGE
-	if (enabled && pledge ("stdio rpath tty prot_exec", NULL) == -1) {
+	if (enabled && pledge ("stdio rpath tty prot_exec inet", NULL) == -1) {
 		eprintf ("sandbox: pledge call failed\n");
-		exit (1);
+		return false;
+	}
+#endif
+#if HAVE_CAPSICUM
+	if (enabled && cap_enter () != 0) {
+		eprintf ("sandbox: call_enter failed\n");
+		return false;
 	}
 #endif
 	return enabled;
@@ -88,7 +141,19 @@ R_API int r_sandbox_system (const char *x, int n) {
 	}
 #if LIBC_HAVE_FORK
 #if LIBC_HAVE_SYSTEM
-	if (n) return system (x);
+	if (n) {
+#if APPLE_SDK_IPHONEOS
+#include <dlfcn.h>
+		int (*__system)(const char *cmd)
+			= dlsym (NULL, "system");
+		if (__system) {
+			return __system (x);
+		}
+		return -1;
+#else
+		return system (x);
+#endif
+	}
 	return execl ("/bin/sh", "sh", "-c", x, (const char*)NULL);
 #else
 	#include <spawn.h>
@@ -184,18 +249,34 @@ R_API int r_sandbox_open (const char *path, int mode, int perm) {
 		return -1;
 	}
 	char *epath = expand_home (path);
+	int ret = -1;
 #if __WINDOWS__
 	mode |= O_BINARY;
+	if (!strcmp (path, "/dev/null")) {
+		path = "NUL";
+	}
 #endif
 	if (enabled) {
 		if ((mode & O_CREAT)
-		|| (mode & O_RDWR)
-		|| (!r_sandbox_check_path (epath))) {
+			|| (mode & O_RDWR)
+			|| (!r_sandbox_check_path (epath))) {
 			free (epath);
 			return -1;
 		}
 	}
-	int ret = open (epath, mode, perm);
+#if __WINDOWS__
+	{
+		wchar_t *wepath = r_utf8_to_utf16 (epath);
+		if (!wepath) {
+			free (epath);
+			return -1;
+		}
+		ret = _wopen (wepath, mode, perm);
+		free (wepath);
+	}
+#else // __WINDOWS__
+	ret = open (epath, mode, perm);
+#endif // __WINDOWS__
 	free (epath);
 	return ret;
 }
@@ -203,21 +284,42 @@ R_API int r_sandbox_open (const char *path, int mode, int perm) {
 R_API FILE *r_sandbox_fopen (const char *path, const char *mode) {
 	FILE *ret = NULL;
 	char *epath = NULL;
-	if (!path)
+	if (!path) {
 		return NULL;
+	}
 	if (enabled) {
-		if (strchr (mode, 'w') || strchr (mode, 'a') || strchr (mode, '+'))
+		if (strchr (mode, 'w') || strchr (mode, 'a') || strchr (mode, '+')) {
 			return NULL;
+		}
 		epath = expand_home (path);
 		if (!r_sandbox_check_path (epath)) {
 			free (epath);
 			return NULL;
 		}
 	}
-	if (!epath)
+	if (!epath) {
 		epath = expand_home (path);
-	if ((strchr (mode, 'w') || r_file_is_regular (epath)))
+	}
+	if ((strchr (mode, 'w') || r_file_is_regular (epath))) {
+#if __WINDOWS__
+		wchar_t *wepath = r_utf8_to_utf16 (epath);
+		if (!wepath) {
+			free (epath);
+			return ret;
+		}
+		wchar_t *wmode = r_utf8_to_utf16 (mode);
+		if (!wmode) {
+			free (wepath);
+			free (epath);
+			return ret;
+		}
+		ret = _wfopen (wepath, wmode);
+		free (wmode);
+		free (wepath);
+#else // __WINDOWS__
 		ret = fopen (epath, mode);
+#endif // __WINDOWS__
+	}
 	free (epath);
 	return ret;
 }
@@ -225,8 +327,12 @@ R_API FILE *r_sandbox_fopen (const char *path, const char *mode) {
 R_API int r_sandbox_chdir (const char *path) {
 	if (enabled) {
 		// TODO: check path
-		if (strstr (path, "../")) return -1;
-		if (*path == '/') return -1;
+		if (strstr (path, "../")) {
+			return -1;
+		}
+		if (*path == '/') {
+			return -1;
+		}
 		return -1;
 	}
 	return chdir (path);
@@ -234,19 +340,38 @@ R_API int r_sandbox_chdir (const char *path) {
 
 R_API int r_sandbox_kill(int pid, int sig) {
 	// XXX: fine-tune. maybe we want to enable kill for child?
-	if (enabled) return -1;
-#if __UNIX__
-	if (pid > 0) {
-		return kill (pid, sig);
+	if (enabled) {
+		return -1;
 	}
-	// eprintf ("r_sandbox_kill: Better not to kill pids <= 0.\n");
+#if __UNIX__
+	return kill (pid, sig);
 #endif
 	return -1;
 }
-
-R_API DIR* r_sandbox_opendir (const char *path) {
-	if (!path)
+#if __WINDOWS__
+R_API HANDLE r_sandbox_opendir (const char *path, WIN32_FIND_DATAW *entry) {
+	wchar_t dir[MAX_PATH];
+	wchar_t *wcpath = 0;
+	if (!path) {
 		return NULL;
+	}
+	if (r_sandbox_enable (0)) {
+		if (path && !r_sandbox_check_path (path)) {
+			return NULL;
+		}
+	}
+	if (!(wcpath = r_utf8_to_utf16 (path))) {
+		return NULL;
+	}
+	swprintf (dir, MAX_PATH, L"%ls\\*.*", wcpath);
+	free (wcpath);
+	return FindFirstFileW (dir, entry);
+}
+#else
+R_API DIR* r_sandbox_opendir (const char *path) {
+	if (!path) {
+		return NULL;
+	}
 	if (r_sandbox_enable (0)) {
 		if (path && !r_sandbox_check_path (path)) {
 			return NULL;
@@ -254,15 +379,14 @@ R_API DIR* r_sandbox_opendir (const char *path) {
 	}
 	return opendir (path);
 }
-
-R_API int r_sys_stop () {
-	int pid;
+#endif
+R_API bool r_sys_stop () {
 	if (enabled) {
 		return false;
 	}
-	pid = r_sys_getpid ();
-#ifndef SIGSTOP
-#define SIGSTOP 19
+#if __UNIX__
+	return !r_sandbox_kill (0, SIGTSTP);
+#else
+	return false;
 #endif
-	return (!r_sandbox_kill (pid, SIGSTOP));
 }

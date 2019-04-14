@@ -58,7 +58,7 @@
 #ifndef _INCLUDE_ELF_SPECS_H
 #define _INCLUDE_ELF_SPECS_H
 
-#define ELF_STRING_LENGTH 256
+#define ELF_STRING_LENGTH 256 
 
 // not strictly ELF, but close enough:
 #define        CGCMAG          "\177CGC"
@@ -77,6 +77,14 @@
 #define EM_VIDEOCORE           95 // XXX dupe for EM_NUM
 #define EM_VIDEOCORE3          137
 #define EM_VIDEOCORE4          200
+#define EM_MSP430              0x69
+
+// specific OpenBSD sections
+#ifndef PT_OPENBSD_RANDOMIZE
+#define PT_OPENBSD_RANDOMIZE	0x65a3dbe6	/* Random data */
+#define PT_OPENBSD_WXNEEDED	0x65a3dbe7	/* Allowing writable/executable mapping */
+#define PT_OPENBSD_BOOTDATA	0x65a41be6	/* Boot time data */
+#endif
 
 
 #endif // _INCLUDE_ELF_SPECS_H

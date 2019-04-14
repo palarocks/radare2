@@ -36,7 +36,6 @@
  * it will print the relative branch/jump/call with this prefix and the destination address as the label. */
 static int formatDisassembledOperand(char *strOperand, int operandNum, const disassembledInstruction dInstruction, formattingOptions fOptions);
 
-
 /* Prints a disassembled instruction, formatted with options set in the formattingOptions structure. */
 static int printDisassembledInstruction(char *out, const disassembledInstruction dInstruction, formattingOptions fOptions) {
 	//char fmt[64];

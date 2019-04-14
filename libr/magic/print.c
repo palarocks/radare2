@@ -39,9 +39,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
 #include <time.h>
 
 #define SZOF(a)	(sizeof(a) / sizeof(a[0]))
@@ -195,6 +192,7 @@ const char *file_fmttime(ut32 v, int local) {
 	char *pp;
 	time_t t = (time_t)v;
 	struct tm *tm;
+	struct tm timestruct;
 
 	if (local) {
 		pp = ctime(&t);
@@ -216,7 +214,7 @@ const char *file_fmttime(ut32 v, int local) {
 #endif /* HAVE_DAYLIGHT */
 		if (daylight)
 			t += 3600;
-		tm = gmtime(&t);
+		tm = gmtime_r(&t, &timestruct);
 		if (!tm)
 			return "*Invalid time*";
 		pp = asctime (tm);
